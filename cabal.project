@@ -1,0 +1,4 @@
+packages:
+  clash-nix-cabal-example.cabal
+
+write-ghc-environment-files: always
