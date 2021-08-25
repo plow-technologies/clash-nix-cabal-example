@@ -13,7 +13,7 @@ import Control.Lens as Lens (Lens, Lens', over)
 import Clash.Intel.ClockGen
 import Clash.Signal
 
-createDomain vSystem{vName="Blink", vPeriod=20000}
+createDomain vSystem{vName="Blink", vPeriod=2000000}
 
 {-# ANN topEntity
   (Synthesize
@@ -38,17 +38,26 @@ createDomain vSystem{vName="Blink", vPeriod=20000}
     }) #-}
 
 
-topEntity ::  Clock Blink -> Reset Blink -> Enable Blink -> Signal Blink (Bit, Bit, Bit)
+
+ma :: Num a => a -> (a, a) -> a
+ma acc (x,y) = acc + x * y
+
+topEntity ::  Clock Blink -> Reset Blink -> Enable Blink -> Signal Blink (Bit, Bit, Bit,Bit , Bit,Bit , Bit,Bit)
 topEntity  clk _ _  =
     exposeClockResetEnable (leds  <$> counter) clk (unsafeToReset $ pure False) (enableGen)  
   where
-    counter :: HiddenClockResetEnable Blink => Signal Blink (Unsigned 16)
-    counter = register   (0 :: Unsigned 16) ((+1) <$> counter)
+    counter :: HiddenClockResetEnable Blink => Signal Blink (Unsigned 8)
+    counter = register   (0 :: Unsigned 8) ((+ 1)  )
 
     leds c =
-      ( c!24
-      , c!23 
-      , c!22
+      ( c!7
+      , c!6 
+      , c!5
+      , c!4
+      , c!3
+      , c!2
+      , c!1
+      , c!0
       )
 
 main :: IO ()
