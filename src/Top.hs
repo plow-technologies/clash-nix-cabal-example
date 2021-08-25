@@ -26,9 +26,14 @@ createDomain vSystem{vName="Blink", vPeriod=20000}
         , PortName "pmod1_4"
         ]
     , t_output   = PortProduct "out"
-        [ PortName "led1"
+        [ PortName "led0"
+        , PortName "led1"
         , PortName "led2"
         , PortName "led3"
+        , PortName "led4"           
+        , PortName "led5"        
+        , PortName "led6"
+        , PortName "led7"
         ]
     }) #-}
 
