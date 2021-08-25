@@ -1,0 +1,6 @@
+* Changes from Standard Starter project for clash 
+
+The tool chain for iceman, yosys and arachne are added
+so that board spins are possible.
+
+A pin profile for the ice40-hx8k board is added.
