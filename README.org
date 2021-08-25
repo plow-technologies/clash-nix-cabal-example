@@ -1,3 +1,22 @@
+* Simple Nix Starter Project
+This starter project contains the scaffolding needed to integrate Clash with the Nix Stack build system. 
+Read [Simple Starter Project](https://github.com/clash-lang/clash-starters/blob/main/simple/README.md) 
+for more information on the various files.
+
+* Commands
+** Install
+=nix-build=
+** Shell
+=nix-shell=
+** Build
+=make=
+** Repl 
+=cabal v2-repl=
+** Program
+=make burn=
+** Clean
+=make clean=
+ 
 * Changes from Standard Starter project for clash 
 
 The tool chain for iceman, yosys and arachne are added
