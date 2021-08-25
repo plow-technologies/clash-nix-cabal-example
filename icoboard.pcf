@@ -1,5 +1,4 @@
 set_io --warn-no-port clk J3
-
 set_io --warn-no-port out_led0 B5
 set_io --warn-no-port out_led1 B4
 set_io --warn-no-port out_led2 A2

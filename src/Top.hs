@@ -13,7 +13,7 @@ import Control.Lens as Lens (Lens, Lens', over)
 import Clash.Intel.ClockGen
 import Clash.Signal
 
-createDomain vSystem{vName="Blink", vPeriod=2000000}
+createDomain vSystem{vName="Blink", vPeriod=20}
 
 {-# ANN topEntity
   (Synthesize
@@ -47,8 +47,7 @@ topEntity  clk _ _  =
     exposeClockResetEnable (leds  <$> counter) clk (unsafeToReset $ pure False) (enableGen)  
   where
     counter :: HiddenClockResetEnable Blink => Signal Blink (Unsigned 8)
-    counter = register   (0 :: Unsigned 8) ((+ 1)  )
-
+    counter = register   (0 :: Unsigned 8) ((+ 1) <$> counter)
     leds c =
       ( c!7
       , c!6 
