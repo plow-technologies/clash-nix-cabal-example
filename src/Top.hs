@@ -13,7 +13,8 @@ import Control.Lens as Lens (Lens, Lens', over)
 import Clash.Intel.ClockGen
 import Clash.Signal
 
-createDomain vSystem{vName="Blink", vPeriod=20}
+createDomain vSystem{vName="StdSystem", vPeriod=hzToPeriod 12e6}
+createDomain vSystem{vName="Blink", vPeriod=hzToPeriod 12e6}
 
 {-# ANN topEntity
   (Synthesize
@@ -42,22 +43,34 @@ createDomain vSystem{vName="Blink", vPeriod=20}
 ma :: Num a => a -> (a, a) -> a
 ma acc (x,y) = acc + x * y
 
+counterFast :: HiddenClockResetEnable Blink => Signal Blink (Unsigned 23)
+counterFast = register   (0 :: Unsigned 23) ((+ 1) <$> counterFast)
+
+counter :: Ord a => Integral a => Eq a => Num a => a -> Unsigned 8
+counter c = if c < 6000000
+               then 0
+               else 0b11111111
+
+leds :: BitPack a => a -> (Bit, Bit, Bit, Bit, Bit, Bit, Bit, Bit)
+leds c =
+  ( c!7
+  , c!6 
+  , c!5
+  , c!4
+  , c!3
+  , c!2
+  , c!1
+  , c!0
+  )
+
+
 topEntity ::  Clock Blink -> Reset Blink -> Enable Blink -> Signal Blink (Bit, Bit, Bit,Bit , Bit,Bit , Bit,Bit)
 topEntity  clk _ _  =
-    exposeClockResetEnable (leds  <$> counter) clk (unsafeToReset $ pure False) (enableGen)  
-  where
-    counter :: HiddenClockResetEnable Blink => Signal Blink (Unsigned 8)
-    counter = register   (0 :: Unsigned 8) ((+ 1) <$> counter)
-    leds c =
-      ( c!7
-      , c!6 
-      , c!5
-      , c!4
-      , c!3
-      , c!2
-      , c!1
-      , c!0
-      )
+    exposeClockResetEnable (leds.counter  <$> counterFast) 
+                           clk 
+                           (unsafeToReset $ pure False) 
+                           enableGen  
+
 
 main :: IO ()
 main = print "hello world"
