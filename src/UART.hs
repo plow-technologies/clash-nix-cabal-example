@@ -28,8 +28,8 @@ import qualified Clash.Prelude as Clash
 import Control.Lens ((.=)
                     ,(+=)
                     ,(%=))
--- import qualified Control.Lens as Lens
-import Control.Monad
+
+import qualified Control.Monad as Monad
 import Control.Monad.Trans.State
 import Data.Generics.Product (field)
 
@@ -62,29 +62,29 @@ uartRX r@(RxReg {rx_d1,
   field @"rx_d1" .= rx_in
   field @"rx_d2" .= rx_d1
   -- Uload the rx data
-  when uld_rx_data $ do
+  Monad.when uld_rx_data $ do
     field @"rx_data"  .= rx_reg
     field @"rx_empty" .= True
   -- Receive data only when rx is enabled
   if rx_enable then do
     -- Check if just received start of frame
-    when (not rx_busy && rx_d2 == 0) $ do
+    Monad.when (not rx_busy && rx_d2 == 0) $ do
       field @"rx_busy"       .= True
       field @"rx_sample_cnt" .= 1
       field @"rx_cnt"        .= 0
     -- Star of frame detected, Proceed with rest of data
-    when rx_busy $ do
+    Monad.when rx_busy $ do
       field @"rx_sample_cnt" += 1
       -- Logic to sample at middle of data
-      when (rx_sample_cnt == 7) $ do
+      Monad.when (rx_sample_cnt == 7) $ do
         if rx_d1 == 1 && rx_cnt == 0 then
           field @"rx_busy" .= False
         else do
           field @"rx_cnt" += 1
           -- start storing the rx data
-          when (rx_cnt > 0 && rx_cnt < 9) $ do
-            field @"rx_reg" %= Clash.replaceBit (rx_cnt - 1) (rx_d2)
-          when (rx_cnt == 9) $ do
+          Monad.when (rx_cnt > 0 && rx_cnt < 9) $ do
+           field @"rx_reg" %= Clash.replaceBit (rx_cnt - 1) (rx_d2)
+          Monad.when (rx_cnt == 9) $ do
             field @"rx_busy" .= False
             -- Check if End of frame received correctly
             if rx_d2 == 0 then
@@ -113,28 +113,38 @@ uartTX :: TxReg -> Bool -> BitVector 8 -> Bool -> TxReg
 uartTX t@(TxReg {tx_empty,
                  tx_reg,                   
                  tx_cnt}) ld_tx_data tx_data tx_enable = flip execState t $ do
-  when ld_tx_data $ do
+  Monad.when ld_tx_data $ do
     if not tx_empty then
       field @"tx_over_run" .= False
     else do
       field @"tx_reg"   .= tx_data
       field @"tx_empty" .= False
-  when (tx_enable && not tx_empty) $ do
+  Monad.when (tx_enable && not tx_empty) $ do
     field @"tx_cnt" += 1
-    when (tx_cnt == 0) $
+    Monad.when (tx_cnt == 0) $
       field @"tx_out" .= 0
-    when (tx_cnt > 0 && tx_cnt < 9) $
+    Monad.when (tx_cnt > 0 && tx_cnt < 9) $
       field @"tx_out" .= tx_reg ! (tx_cnt - 1)
-    when (tx_cnt == 9) $ do
+    Monad.when (tx_cnt == 9) $ do
       field @"tx_out"   .= 1
       field @"tx_cnt"   .= 0
       field @"tx_empty" .= True
-  unless tx_enable $
+  Monad.unless tx_enable $
     field @"tx_cnt" .= 0
 
 -- Combine RX and TX logic
 
 
+uart
+  :: Clash.HiddenClockResetEnable dom => 
+     Clash.Signal dom Bool
+     -> Clash.Signal dom (BitVector 8)
+     -> Clash.Signal dom Bool
+     -> Clash.Signal dom Bit
+     -> Clash.Signal dom Bool
+     -> Clash.Signal dom Bool
+     -> (Clash.Signal dom Bit, Clash.Signal dom Bool,
+         Clash.Signal dom (BitVector 8), Clash.Signal dom Bool)
 uart ld_tx_data tx_data tx_enable rx_in uld_rx_data rx_enable =
     ( tx_out   <$> txReg
     , tx_empty <$> txReg
