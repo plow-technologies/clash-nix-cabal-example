@@ -1,137 +1,166 @@
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module UART (uart) where
-import Clash.Signal 
+import qualified Clash.Signal as Signal
 
-import Clash.Prelude 
-import Control.Lens 
+import Clash.Prelude (BitVector
+                     ,Unsigned
+                     ,Bool(True,False)
+                     ,Bit
+                     ,Generic
+                     ,Show
+                     ,Eq
+                     ,NFDataX
+                     ,(<*>)
+                     ,(<$>)
+                     ,(!)
+                     ,($)
+                     ,(>)
+                     ,(&&)
+                     ,(==)
+                     ,flip
+                     ,not
+                     ,(<)
+                     ,(-))
+import qualified Clash.Prelude as Clash
+import Control.Lens ((.=)
+                    ,(+=)
+                    ,(%=))
+-- import qualified Control.Lens as Lens
 import Control.Monad
 import Control.Monad.Trans.State
-
+import Data.Generics.Product (field)
 
 -- UART RX Logic
 data RxReg
   = RxReg
-  { _rx_reg        :: BitVector 8
-  , _rx_data       :: BitVector 8
-  , _rx_sample_cnt :: Unsigned 4
-  , _rx_cnt        :: Unsigned 4
-  , _rx_frame_err  :: Bool
-  , _rx_over_run   :: Bool
-  , _rx_empty      :: Bool
-  , _rx_d1         :: Bit
-  , _rx_d2         :: Bit
-  , _rx_busy       :: Bool
+  { rx_reg        :: BitVector 8
+  , rx_data       :: BitVector 8
+  , rx_sample_cnt :: Unsigned 4
+  , rx_cnt        :: Unsigned 4
+  , rx_frame_err  :: Bool
+  , rx_over_run   :: Bool
+  , rx_empty      :: Bool
+  , rx_d1         :: Bit
+  , rx_d2         :: Bit
+  , rx_busy       :: Bool
   } deriving (Generic,  Eq,Show,NFDataX )
 
 
-makeLenses ''RxReg
 
 uartRX :: RxReg -> Bit -> Bool -> Bool -> RxReg
-uartRX r@(RxReg {..}) rx_in uld_rx_data rx_enable = flip execState r $ do
+uartRX r@(RxReg {rx_d1,
+                 rx_d2,
+                 rx_cnt,
+                 rx_empty,
+                 rx_reg,
+                 rx_busy,
+                 rx_sample_cnt}) rx_in uld_rx_data rx_enable = flip execState r $ do
   -- Synchronize the async signal
-  rx_d1 .= rx_in
-  rx_d2 .= _rx_d1
+  field @"rx_d1" .= rx_in
+  field @"rx_d2" .= rx_d1
   -- Uload the rx data
   when uld_rx_data $ do
-    rx_data  .= _rx_reg
-    rx_empty .= True
+    field @"rx_data"  .= rx_reg
+    field @"rx_empty" .= True
   -- Receive data only when rx is enabled
   if rx_enable then do
     -- Check if just received start of frame
-    when (not _rx_busy && _rx_d2 == 0) $ do
-      rx_busy       .= True
-      rx_sample_cnt .= 1
-      rx_cnt        .= 0
+    when (not rx_busy && rx_d2 == 0) $ do
+      field @"rx_busy"       .= True
+      field @"rx_sample_cnt" .= 1
+      field @"rx_cnt"        .= 0
     -- Star of frame detected, Proceed with rest of data
-    when _rx_busy $ do
-      rx_sample_cnt += 1
+    when rx_busy $ do
+      field @"rx_sample_cnt" += 1
       -- Logic to sample at middle of data
-      when (_rx_sample_cnt == 7) $ do
-        if _rx_d1 == 1 && _rx_cnt == 0 then
-          rx_busy .= False
+      when (rx_sample_cnt == 7) $ do
+        if rx_d1 == 1 && rx_cnt == 0 then
+          field @"rx_busy" .= False
         else do
-          rx_cnt += 1
+          field @"rx_cnt" += 1
           -- start storing the rx data
-          when (_rx_cnt > 0 && _rx_cnt < 9) $ do
-            rx_reg %= replaceBit (_rx_cnt - 1) _rx_d2
-          when (_rx_cnt == 9) $ do
-            rx_busy .= False
+          when (rx_cnt > 0 && rx_cnt < 9) $ do
+            field @"rx_reg" %= Clash.replaceBit (rx_cnt - 1) (rx_d2)
+          when (rx_cnt == 9) $ do
+            field @"rx_busy" .= False
             -- Check if End of frame received correctly
-            if _rx_d2 == 0 then
-              rx_frame_err .= True
+            if rx_d2 == 0 then
+              field @"rx_frame_err" .= True
             else do
-              rx_empty     .= False
-              rx_frame_err .= False
+              field @"rx_empty"     .= False
+              field @"rx_frame_err" .= False
               -- Check if last rx data was not unloaded
-              rx_over_run  .= not _rx_empty
+              field @"rx_over_run"  .= not rx_empty
   else do
-    rx_busy .= False
+    field @"rx_busy" .= False
 
 -- UART TX Logic
 data TxReg
   = TxReg
-  { _tx_reg      :: BitVector 8
-  , _tx_empty    :: Bool
-  , _tx_over_run :: Bool
-  , _tx_out      :: Bit
-  , _tx_cnt      :: Unsigned 4
+  { tx_reg      :: BitVector 8
+  , tx_empty    :: Bool
+  , tx_over_run :: Bool
+  , tx_out      :: Bit
+  , tx_cnt      :: Unsigned 4
   } deriving (Generic,NFDataX)
 
-makeLenses ''TxReg
+
 
 uartTX :: TxReg -> Bool -> BitVector 8 -> Bool -> TxReg
-uartTX t@(TxReg {..}) ld_tx_data tx_data tx_enable = flip execState t $ do
+uartTX t@(TxReg {tx_empty,
+                 tx_reg,                   
+                 tx_cnt}) ld_tx_data tx_data tx_enable = flip execState t $ do
   when ld_tx_data $ do
-    if not _tx_empty then
-      tx_over_run .= False
+    if not tx_empty then
+      field @"tx_over_run" .= False
     else do
-      tx_reg   .= tx_data
-      tx_empty .= False
-  when (tx_enable && not _tx_empty) $ do
-    tx_cnt += 1
-    when (_tx_cnt == 0) $
-      tx_out .= 0
-    when (_tx_cnt > 0 && _tx_cnt < 9) $
-      tx_out .= _tx_reg ! (_tx_cnt - 1)
-    when (_tx_cnt == 9) $ do
-      tx_out   .= 1
-      tx_cnt   .= 0
-      tx_empty .= True
+      field @"tx_reg"   .= tx_data
+      field @"tx_empty" .= False
+  when (tx_enable && not tx_empty) $ do
+    field @"tx_cnt" += 1
+    when (tx_cnt == 0) $
+      field @"tx_out" .= 0
+    when (tx_cnt > 0 && tx_cnt < 9) $
+      field @"tx_out" .= tx_reg ! (tx_cnt - 1)
+    when (tx_cnt == 9) $ do
+      field @"tx_out"   .= 1
+      field @"tx_cnt"   .= 0
+      field @"tx_empty" .= True
   unless tx_enable $
-    tx_cnt .= 0
+    field @"tx_cnt" .= 0
 
 -- Combine RX and TX logic
 
 
 uart ld_tx_data tx_data tx_enable rx_in uld_rx_data rx_enable =
-    ( _tx_out   <$> txReg
-    , _tx_empty <$> txReg
-    , _rx_data  <$> rxReg
-    , _rx_empty <$> rxReg
+    ( tx_out   <$> txReg
+    , tx_empty <$> txReg
+    , rx_data  <$> rxReg
+    , rx_empty <$> rxReg
     )
   where
-    rxReg     = register rxRegInit (uartRX <$> rxReg <*> rx_in <*> uld_rx_data
-                                           <*> rx_enable)
-    rxRegInit = RxReg { _rx_reg        = 0
-                      , _rx_data       = 0
-                      , _rx_sample_cnt = 0
-                      , _rx_cnt        = 0
-                      , _rx_frame_err  = False
-                      , _rx_over_run   = False
-                      , _rx_empty      = True
-                      , _rx_d1         = 1
-                      , _rx_d2         = 1
-                      , _rx_busy       = False
+    rxReg     = Signal.register rxRegInit (uartRX <$> rxReg <*> rx_in <*> uld_rx_data
+                                                  <*> rx_enable)
+    rxRegInit = RxReg { rx_reg        = 0
+                      , rx_data       = 0
+                      , rx_sample_cnt = 0
+                      , rx_cnt        = 0
+                      , rx_frame_err  = False
+                      , rx_over_run   = False
+                      , rx_empty      = True
+                      , rx_d1         = 1
+                      , rx_d2         = 1
+                      , rx_busy       = False
                       }
 
-    txReg     = register txRegInit (uartTX <$> txReg <*> ld_tx_data <*> tx_data
-                                           <*> tx_enable)
-    txRegInit = TxReg { _tx_reg      = 0
-                      , _tx_empty    = True
-                      , _tx_over_run = False
-                      , _tx_out      = 1
-                      , _tx_cnt      = 0
+    txReg     = Signal.register txRegInit (uartTX <$> txReg <*> ld_tx_data <*> tx_data
+                                                  <*> tx_enable)
+    txRegInit = TxReg { tx_reg      = 0
+                      , tx_empty    = True
+                      , tx_over_run = False
+                      , tx_out      = 1
+                      , tx_cnt      = 0
                       }
